@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Sat Jun  8 18:37:42 2019
 
-@author: veredas
-"""
-
-#!/usr/bin/env/python
 
 import sys
 import pandas

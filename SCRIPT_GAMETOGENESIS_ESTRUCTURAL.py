@@ -134,18 +134,18 @@ lec_pat = len(bed_file)
 gene_file = read_fasta_gen(sys.argv[3])
 gene=gene_file[1]
 # Fourth argument: number of the chromosome position where the gene starts
-pos_init = int(sys.argv[5])
+pos_init = int(sys.argv[4])
 # Fifth: number of the chromosome position where the gene ends
-pos_end = int(sys.argv[6])
+pos_end = int(sys.argv[5])
 # Sixth: cut-off of lectures
-n_lec = int(sys.argv[8])
+n_lec = int(sys.argv[6])
 # Seventh argument: parental reads file name in fasta format
-fasta_progenitor = read_fasta(sys.argv[9])
+fasta_progenitor = read_fasta(sys.argv[7])
 # Eigth argument: parental reads file name in bed format
-bed_progenitor = read_bed(sys.argv[10])
+bed_progenitor = read_bed(sys.argv[8])
 lec_prog = len(bed_progenitor)
 # Ninth: name of the output file 
-output = sys.argv[11]
+output = sys.argv[9]
 extension = output+".csv" #the output file will be a csv file
 
 

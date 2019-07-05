@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Mon Jun 10 17:37:41 2019
-
-@author: veredas
-"""
 
 import numpy
 import sys

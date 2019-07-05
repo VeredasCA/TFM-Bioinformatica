@@ -98,7 +98,7 @@ def pos_reads(gene, bed_file, fasta_file, pos_init, pos_end):
         count_T = 0
         count_r = 0
         count_f = 0
-        for j in range(len(dicc[i])): #para cada posición
+        for j in range(len(dicc[i])): 
             if len(dicc[i][j]) > 0:
                 base = dicc[i][j][2]
                 strand = dicc[i][j][3]
@@ -128,7 +128,7 @@ def pos_reads(gene, bed_file, fasta_file, pos_init, pos_end):
 
 # if the first argument is '-h', the help is shown
 if sys.argv[1] == "-h":       
-    print("Usage: SCRIPT_GAMETOGENESIS.py [reads_file_patient.fa] [reads_file_patient.bed] [gene_sequence.fa] [pathogenic_variants_Ensembl.csv] [gene start position in chromosome] [gene end position in chromosome] [gene mutation position in chromosome] [minimun number of reads with the pathogenic variation] [reads_file_progenitor.fa] [reads_file_progenitor.bed] [name of the CSV output file]")
+    print("Usage: SCRIPT_GAMETOGENESIS.py [reads_file_patient.fa] [reads_file_patient.bed] [gene_sequence.fa] [gene start position in chromosome] [gene end position in chromosome] [gene mutation position in chromosome] [minimun number of reads with the pathogenic variation] [reads_file_progenitor.fa] [reads_file_progenitor.bed] [name of the CSV output file]")
     exit ()
 
 # First argument: reads file name in fasta format
@@ -139,23 +139,21 @@ lec_pat = len(bed_file)
 # Third argument: gene file name in fasta format
 gene_file = read_fasta_gen(sys.argv[3])
 gene=gene_file[1]
-# Fourth argument: information of pathogenic variants in CSV format (downloaded from Ensembl)
-pat_variants = sys.argv[4]
-# Fifth: number of the chromosome position where the gene starts
-pos_init = int(sys.argv[5])
-# Sixth: number of the chromosome position where the gene ends
-pos_end = int(sys.argv[6])
-# Seventh: number of chromosome position where the mutation is located
-pos_mut = int(sys.argv[7])
-# Eigth: cut-off of lectures
-n_lec = int(sys.argv[8])
-# Ninth argument: parental reads file name in fasta format
-fasta_progenitor = read_fasta(sys.argv[9])
-# Tenth argument: parental reads file name in bed format
-bed_progenitor = read_bed(sys.argv[10])
+# Forth: number of the chromosome position where the gene starts
+pos_init = int(sys.argv[4])
+# Fifth: number of the chromosome position where the gene ends
+pos_end = int(sys.argv[5])
+# Sixth: number of chromosome position where the mutation is located
+pos_mut = int(sys.argv[6])
+# Seventh: cut-off of lectures
+n_lec = int(sys.argv[7])
+# Eigth argument: parental reads file name in fasta format
+fasta_progenitor = read_fasta(sys.argv[8])
+# Ninth argument: parental reads file name in bed format
+bed_progenitor = read_bed(sys.argv[9])
 lec_prog = len(bed_progenitor)
-# Eleventh: name of the output file 
-output = sys.argv[11]
+# Tenth: name of the output file 
+output = sys.argv[10]
 extension = output+".csv" #the output file will be a csv file
 
 
@@ -174,7 +172,7 @@ for i in reverse:
         gen_f = gen_f+'C'
 
 
-#new bed with only the reads which contains the pathogenic mutation
+#new bed: only contains the reads which contains the location of the pathogenic mutation
 newbed=[]
 for i in bed_file:
     init = int(i[1]) 
@@ -232,7 +230,6 @@ variants_f = list(variants_f_dic.keys())
 print("Shared variants in reverse strand:", variants_r, "\nShared variants in forward strand:", variants_f)
 
 
-
 #csv with shared variants
 with open(output+"_variants_shared"+".csv", 'w') as a:
     
@@ -244,7 +241,6 @@ with open(output+"_variants_shared"+".csv", 'w') as a:
     for j in variants_f:
         #column data
         a.write("%s,%s,%s\n"%(j, "-", "forward"))
-
 
 
 ## Find variants in normal or mutated allele
@@ -299,7 +295,7 @@ for i in newbed:
             for j in variants_r_dic:
                 pos_variante_global = pos_end - (j-1)
                 pos_variante_read = posend-pos_variante_global
-                if pos_variante_read < len(seq) and pos_variante_global > posin-1  and pos_variante_global < posend+1: #> posin-1:
+                if pos_variante_read < len(seq) and pos_variante_global > posin-1  and pos_variante_global < posend+1: 
                     variante = seq[pos_variante_read]
                     pos_var_gen = gene[j-1]
                     if pos_var_gen != variante:

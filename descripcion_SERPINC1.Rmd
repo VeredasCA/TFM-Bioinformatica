@@ -1,0 +1,375 @@
+---
+title: "Descripcion de la variabilidad recopilada en SERPINC1 y Antitrombina."
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Generacion de ficheros.
+
+Para generar un archivo CSV que recopile las variantes patogenicas del gen se filtra el CSV descargado de Ensembl con las variantes globales de dicho gen mediante el identificador. 
+
+```{r}
+
+# El fichero de la variabilidad global del gen se carga tal cual se ha descargado de Ensembl.
+variabilidad.completa <- read.csv("./variabilidad-completa.csv")
+
+# Para cargar el fichero de variabilidad patogenica, leemos el fichero con las mutaciones patogenicas de HGMD y nos quedamos solo con la columna de los ID y del tipo de mutacion para extraer del fichero de variabilidad completa solo aquellas variantes que comparten el ID de HGMD, ya que seran las variantes patogenicas. 
+HGMD_id <- read.csv("./HGMD_id.csv")
+HGMD_id <- HGMD_id[,c(1, 6)]
+
+ID <- unique(HGMD_id$ID)
+Variation <- unique(HGMD_id$Variation)
+
+variabilidad.patogenica <- subset(variabilidad.completa, variabilidad.completa$Variant.ID %in%ID)
+
+#write.csv(variabilidad.patogenica, "variabilidad-patogenica.csv")
+```
+
+
+```{r}
+# Variantes globales del gen
+nrow(variabilidad.completa)
+
+# Nucleotidos en los que existe variabilidad respecto al gen de referencia
+length(unique(variabilidad.completa[,"Location"]))
+
+# Variantes patogenicas del gen
+nrow(variabilidad.patogenica)
+
+# Nucleotidos en los que existe variabilidad patogenica
+length(unique(variabilidad.patogenica[,"Location"]))
+
+# Variantes patogenicas en el gen
+length(unique(variabilidad.patogenica[,"Variant.ID"]))
+```
+
+## Cargar ficheros. 
+
+En primer lugar, se cargan los archivos CSV que almacenan la variabilidad del gen SERPINC1 (tanto global como patogenica). Estos archivos tienen una estructura identica a la tabla de variantes (Genetic variation -> Variant table) de Ensembl.
+
+```{r}
+variabilidad.completa <- read.csv("./variabilidad-completa.csv")
+variabilidad.patogenica <- read.csv("./variabilidad-patogenica.csv")
+
+```
+
+Para calcular la posicion de los exones, se lee el fichero CSV extraido de RCSB PDB que contiene las posiciones de inicio y fin de estos en el cromosoma (cadena forward). Se genera un vector con las posiciones en el cromosoma de todos los nucleotidos que son exonicos. 
+
+```{r, eval=TRUE}
+library(seqinr)
+pos_exones <- read.csv("./exones-SERPINC1-38.csv")
+exones <- c(pos_exones[1,2]:pos_exones[1,3], pos_exones[2,2]:pos_exones[2,3], pos_exones[3,2]:pos_exones[3,3], pos_exones[4,2]:pos_exones[4,3], pos_exones[5,2]:pos_exones[5,3], pos_exones[6,2]:pos_exones[6,3], pos_exones[7,2]:pos_exones[7,3])
+
+```
+
+La zona funcional se define como el lazo del centro reactivo, que abarca desde el aminoacido 377 al 400 (P1-P17). 
+
+```{r}
+RCL = 377:400
+```
+
+
+## Funcion para el calculo de variantes.
+
+El argumento "variabilidad" es un data.frame que recopila la informacion extraida de Ensembl, cuya estructura es igual a la de la tabla de variantes (Genetic variantion -> Variant table) de dicha base de datos. En este caso seran variabilidad.completa y variabilidad.patogenica los data frame usados. El argumento "pos_exones" es un vector con las posiciones de todos los nucleotidos que forman parte de los exones del gen. 
+
+```{r}
+tabla_variabilidad <- function(variabilidad, pos_exones){
+
+#Se extraen todos los tipos de variantes recopilados en la tabla y se agrupan por el tipo variante que son: variante intronicas/flanqueantes, de splicing o exonicas. Estas a su vez se subdividen en variantes de perdida de la pauta de lectura, de perdida de sentido, sin sentido, de modificacion del inicio de la traduccion y silenciosas.
+  
+  categories <- unique(variabilidad$Conseq..Type);categories
+  
+  UTR <- as.vector(categories[grepl("UTR", categories)])
+  UTR <- c(UTR, as.vector(categories[grepl("non coding", categories)]))
+  
+  splice <- as.vector(categories[grepl("splic", categories)])
+  
+  lectura <- as.vector(categories[grepl("frame", categories)])
+  lectura <- c(lectura, as.vector(categories[grepl("stop ret", categories)]))
+  lectura <- c(lectura, as.vector(categories[grepl("coding seq", categories)]))
+  
+  missense <- as.vector(categories[grepl("missense", categories)])
+  missense <- c(missense, as.vector(categories[grepl("coding seq", categories)]))
+  
+  nonsense <- as.vector(categories[grepl("stop gained", categories)])
+  nonsense <- c(nonsense, as.vector(categories[grepl("coding seq", categories)]))
+
+  inicio <- as.vector(categories[grepl("start", categories)])
+  inicio <- c(inicio, as.vector(categories[grepl("coding seq", categories)]))
+  
+  silenciosas <- as.vector(categories[grepl("syn", categories)])
+  silenciosas <- c(silenciosas, as.vector(categories[grepl("coding seq", categories)]))
+  
+  intron <- as.vector(categories[grepl("intron", categories)])
+  
+  # Se agrupan todas las variantes en una lista
+  todas <- list(intron, UTR, splice, lectura, missense, nonsense, inicio, silenciosas)
+  
+  #Se crea un contador para cada tipo de variacion (numero_global, contador) y un vector vacio en el que guardar dicho contador.
+  numero_global = 0
+  contador = 0
+  lista = c()
+  contador_exones = c()
+  
+  for (i in seq(1, length(todas))){ #En cada tipo de variacion (intronica, UTR, de splicing,  perdida pauta de lectura, nonsense, missense, variante de inicio y sinonima)
+   for(j in todas[[i]]){ # Se recorre cada subtipo de variacion (3' UTR, frameshift variant, etc. )
+     
+#Primero se cuenta el nunmero de veces que aparece la subvariante.
+    subtabla <- subset(variabilidad, variabilidad$Conseq..Type == j)
+    numero <- nrow(subtabla) #se extrae el numero de veces que aparece el subtipo
+    numero_global = numero_global+numero #se almacena 
+    numero = 0
+    
+#Ahora vemos cuantas variantes hay en exones, para lo que se inicia un contador y se une una columna con la posicion de la variante, sin chr: delante.
+    posicion_base <- as.numeric(gsub(".*:","",subtabla$Location))
+    subtabla <- cbind(subtabla, posicion_base)
+    count= 0
+    for(i in seq(1, nrow(subtabla))){ #para cada variante del subtipo que estamos viendo
+      if(subtabla[i,"posicion_base"] %in% pos_exones == TRUE){ #si la posicion de esa subvariante esta en el vector de posiciones de exones, el contador aumenta 1.
+        count = count+1
+      }
+    }
+    contador <- contador+count #se almacena en contador para poderlo reiniciar con otra subvariante distinta
+   }
+    contador_exones = c(contador_exones, contador) 
+    lista = c(lista, numero_global) #el numero de veces que aparece una variante es la suma de las veces que aparecen sus subtipos
+    
+    numero_global = 0
+    contador= 0
+  }
+
+  
+  #se construye el data frame
+  
+  intr_fl <- rep("Intronica/Flank", times = 2)
+  spl <- rep("Splicing", times = 1)
+  ex <- rep("Exon", times = 5)
+  
+  tabla_var_g <- data.frame("variante" = c(intr_fl, spl, ex), "tipo-variante" = c("Intronica", "UTR - No codificante", "Splicing",  "Perdida pauta lectura", "Missense", "Nonsense", "Variante inicio",  "Silenciosa"))
+  tabla_var_g[,"apariciones global"] = lista
+  tabla_var_g[,"apariciones en exones"] = contador_exones
+  
+  total_g = c(" ", " ", sum(lista), sum(contador_exones))
+  tabla_var_g <- rbind(tabla_var_g, total_g)
+
+  print(tabla_var_g)
+}
+```
+
+```{r}
+tabla_variabilidad_proteina <- function(variabilidad, pos_funcional){
+
+#Se extraen todos los tipos de variantes recopilados en la tabla y se agrupan por el tipo variante que son: variante intronicas, de splicing o exonicas/flanqueantes. Estas a su vez se subdividen en variantes no codificantes, de perdida de la pauta de lectura, de perdida de sentido, sin sentido, de modificacion del inicio de la traduccion y silenciosas.
+  
+  categories <- unique(variabilidad$Conseq..Type);categories
+  
+  UTR <- as.vector(categories[grepl("UTR", categories)])
+  UTR <- c(UTR, as.vector(categories[grepl("non coding", categories)]))
+  
+  splice <- as.vector(categories[grepl("splic", categories)])
+  
+  lectura <- as.vector(categories[grepl("frame", categories)])
+  lectura <- c(lectura, as.vector(categories[grepl("stop ret", categories)]))
+  lectura <- c(lectura, as.vector(categories[grepl("coding seq", categories)]))
+  
+  missense <- as.vector(categories[grepl("missense", categories)])
+  missense <- c(missense, as.vector(categories[grepl("coding seq", categories)]))
+  
+  nonsense <- as.vector(categories[grepl("stop gained", categories)])
+  nonsense <- c(nonsense, as.vector(categories[grepl("coding seq", categories)]))
+
+  inicio <- as.vector(categories[grepl("start", categories)])
+  inicio <- c(inicio, as.vector(categories[grepl("coding seq", categories)]))
+  
+  silenciosas <- as.vector(categories[grepl("syn", categories)])
+  silenciosas <- c(silenciosas, as.vector(categories[grepl("coding seq", categories)]))
+  
+  intron <- as.vector(categories[grepl("intron", categories)])
+  
+  # Se agrupan todas las variantes en una lista
+  todas <- list(intron, UTR, splice,lectura, missense, nonsense, inicio, silenciosas)
+  
+  #Se crea un contador para cada tipo de variacion (numero_global, contador_aa) y un vector vacio en el que guardar dicho contador.
+  numero_global = 0
+  contador_aa = 0
+  lista = c()
+  contador_RCL = c()
+  
+  subtabla_p <- subset(variabilidad, !is.na(variabilidad$AA.coord))
+  
+  for (i in seq(1, length(todas))){ #En cada tipo de variacion (intronica, de splicing, UTR, perdida pauta de lectura, nonsense, missense, variante de inicio y sinonima)
+   for(j in todas[[i]]){ # Se recorre cada subtipo de variacion (3' UTR, frameshift variant, etc. )
+#Primero se cuenta el nunmero de veces que aparece la subvariante.
+    subtabla <- subset(subtabla_p, subtabla_p$Conseq..Type == j)
+    
+    numero <- nrow(subtabla) #se extrae el numero de veces que aparece el subtipo
+    numero_global = numero_global+numero #se almacena 
+    
+    if(numero != 0){
+      #Por ultimo se mira la localizacion de la variante en la proteina
+      posicion_aa <- as.numeric(subtabla$AA.coord)
+    
+      subtabla <- cbind(subtabla, posicion_aa)
+      count_aa= 0
+      
+      for(i in seq(1, nrow(subtabla))){ #para cada variante del subtipo que estamos viendo
+        if(subtabla[i,"posicion_aa"] %in% pos_funcional == TRUE){ #si la posicion de esa subvariante esta en el vector de posiciones de exones, el contador aumenta 1.
+          count_aa = count_aa+1
+        }
+      }
+      contador_aa <- contador_aa+count_aa #se almacena en contador para poderlo reiniciar con otra subvariante distinta
+    }
+    numero = 0
+    
+   }
+    contador_RCL = c(contador_RCL, contador_aa)
+    lista = c(lista, numero_global) #el numero de veces que aparece una variante es la suma de las veces que aparecen sus subtipos
+    
+    numero_global = 0
+    contador_aa = 0
+  }
+  #se construye el data frame
+  
+  intr_fl <- rep("Intronica/Flank", times = 2)
+  spl <- rep("Splicing", times = 1)
+  ex <- rep("Exon", times = 5)
+  
+  tabla_var_p <- data.frame("variante" = c(intr_fl, spl, ex), "tipo-variante" = c("Intronica", "UTR - No codificante", "Splicing", "Perdida pauta lectura", "Missense", "Nonsense", "Variante inicio",  "Silenciosa"))
+  tabla_var_p[,"apariciones global"] = lista
+  tabla_var_p[,"apariciones en zona funcional"] = contador_RCL
+
+  total_p = c(" ", " ", sum(lista), sum(contador_RCL))
+  tabla_var_p <- rbind(tabla_var_p, total_p)
+
+  print(tabla_var_p)
+}
+
+```
+
+Con la funcion tabla_variabilidad se crea un mapa de variabilidad intronica/exonica en el gen y de variabilidad estructural/funcional en la proteina. Para ello, se extraen las posiciones de las variantes genicas y proteicas y se clasifican segun su localizacion en exones o intrones y en la zona estructural o funcional.
+
+```{r}
+global_g <- tabla_variabilidad(variabilidad.completa, exones)
+patogenica_g <- tabla_variabilidad(variabilidad.patogenica, exones)
+global_p <- tabla_variabilidad_proteina(variabilidad.completa, RCL)
+patogenica_p <- tabla_variabilidad_proteina(variabilidad.patogenica, RCL)
+```
+
+
+## Mutaciones puntuales. 
+
+Se extraen los cambios puntuales de las variantes, tanto globales como patogenicas. 
+Se observa que la variante G/A es la que mas se da de forma global en el gen (1620/10447), mientras que C/T es la que mas se da en las variantes patogenicas (62/357). En la proteina, la variante P/L es la que mas se da (16/501) de manera global, mientras que P/L y R/Q aparecen 11/257 en las variantes patogenicas. 
+
+```{r}
+location_prot <- variabilidad.patogenica$AA.coord
+location_prot <-location_prot[!is.na(location_prot)]
+
+#posiciones_pat contiene la informacion de Ensembl de las variantes patogenicas.
+posiciones_pat <- subset(variabilidad.completa, variabilidad.completa$AA.coord %in% location_prot)
+
+alelos_pat <- posiciones_pat$Alleles #Diferentes alelos
+
+
+alelos_globales <- variabilidad.completa$Alleles
+tipos_alelos_globales <- as.data.frame(table(alelos_globales)) 
+max_alelos_g <- tipos_alelos_globales$alelos_globales[tipos_alelos_globales$Freq == max(tipos_alelos_globales$Freq)]
+print("Alelos mas representados de manera global: ")
+max(tipos_alelos_globales$Freq); max_alelos_g; sum(tipos_alelos_globales$Freq)
+
+tipos_alelos_pat <- as.data.frame(table(alelos_pat))
+tipos_alelos_pat <- tipos_alelos_pat[tipos_alelos_pat$alelos_pat != "HGMD_MUTATION" & tipos_alelos_pat$alelos_pat != "COSMIC_MUTATION",]
+max_alelos_pat <- tipos_alelos_pat$alelos_pat[tipos_alelos_pat$Freq == max(tipos_alelos_pat$Freq)]
+print("Alelos patogenicos mas representados: ")
+max(tipos_alelos_pat$Freq); max_alelos_pat; sum(tipos_alelos_pat$Freq)
+
+aas_globales <- variabilidad.completa$AA
+tipos_aas_globales <- as.data.frame(table(aas_globales)) 
+tipos_aas_globales <- tipos_aas_globales[-1,]  #se elimina la primera fila porque no tiene ningun alelo recopilado
+tipos_aas_globales <- tipos_aas_globales[grepl("/", tipos_aas_globales$aas_globales),]#se buscan las filas que continen dos o mas alelos (para eliminar las que solo tienen uno, ya que no serian variantes)
+max_aa_g <- tipos_aas_globales$aas_globales[tipos_aas_globales$Freq == max(tipos_aas_globales$Freq)]
+print("Aminoacidos mas representados de manera global: ")
+max(tipos_aas_globales$Freq); max_aa_g; sum(tipos_aas_globales$Freq)
+
+aas_pat <- posiciones_pat$AA; length(aas_pat)
+tipos_aas_pat <- as.data.frame(table(aas_pat))
+tipos_aas_pat <- tipos_aas_pat[-1,]  #se elimina la primera fila porque no tiene ningun alelo recopilado
+tipos_aas_pat <- tipos_aas_pat[grepl("/", tipos_aas_pat$aas_pat),]#se buscan las filas que continen dos o mas alelos (para eliminar las que solo tienen uno, ya que no serian variantes)
+max_aa <- tipos_aas_pat$aas_pat[tipos_aas_pat$Freq == max(tipos_aas_pat$Freq)]
+print("Aminoacidos patogenicos mas representados: ")
+max(tipos_aas_pat$Freq); max_aa; sum(tipos_aas_pat$Freq)
+```
+
+## Secuencias hot-spot (CpG, CCAGG y CCTGG). 
+
+Buscamos ahora los identificadores y posiciones en los que los alelos son C/T, es decir, extraemos solo aquellos hot-spots donde se da el cambio mutacional mas frecuente, C>T. Como estamos en la cadena reversa, se busca el cambio G>A. 
+
+```{r}
+
+CpG <- read.csv("./CpG_hotspots.csv")
+CCAGG <- read.csv("./CCAGG_hotspots.csv")
+CCTGG <- read.csv("./CCTGG_hotspots.csv")
+
+
+CpG_exonica_identificada_f = CpG[CpG$Type.of.hot.spot == "Pathogenic exon", "Locations.in.chromosome"]
+CpG_intronica_identificada_f = CpG[CpG$Type.of.hot.spot == "Pathogenic intron", "Locations.in.chromosome"]
+
+CCAGG_exonica_identificada_f = CCAGG[CCAGG$Type.of.hot.spot == "Pathogenic exon", "Locations.in.chromosome"]
+CCAGG_intronica_identificada_f = CCAGG[CCAGG$Type.of.hot.spot == "Pathogenic intron", "Locations.in.chromosome"]
+
+CCTGG_exonica_identificada_f = CCTGG[CCTGG$Type.of.hot.spot == "Pathogenic exon", "Locations.in.chromosome"]
+CCTGG_intronica_identificada_f = CCTGG[CCTGG$Type.of.hot.spot == "Pathogenic intron", "Locations.in.chromosome"]
+```
+
+
+```{r}
+ID_Pos_Alelo_Patogenica <- function(posiciones, variabilidad, cambio){
+  vec = c()
+  final = c()
+  for(j in posiciones){
+    j = gsub("1739", "1:1739", j)
+    for(i in rownames(variabilidad)){
+      i <- as.numeric(as.character(i))
+      pos = as.character(variabilidad[i, "Location"])
+      if(pos == j){
+        id <- as.character(variabilidad[i, "Variant.ID"])
+        if(grepl("^rs", id) == TRUE){
+          alelo <- as.character(variabilidad[i, "Alleles"])
+          loc_pat <- as.character(variabilidad[i+1, "Location"])
+          loc_pat_1 <- as.character(variabilidad[i-1, "Location"])
+          if(loc_pat == pos & grepl(cambio, alelo) == TRUE){
+            id_pat <- as.character(variabilidad[i+1, "Variant.ID"])
+            if(grepl("^COS", id_pat) == FALSE & grepl("^rs", id_pat) == FALSE){
+              id_hgmd <- id_pat
+              vec = c(id_hgmd, alelo, j)
+              final = c(final, vec)
+            }
+          }
+          if(loc_pat_1 == pos & grepl(cambio, alelo) == TRUE){
+            id_pat <- as.character(variabilidad[i+1, "Variant.ID"])
+            if(grepl("^COS", id_pat) == FALSE & grepl("^rs", id_pat) == FALSE){
+              id_hgmd <- id_pat
+              vec = c(id_hgmd, alelo, j)
+              final = c(final, vec)
+            }
+          }
+          
+        }
+      }
+    }
+  }
+  print(final)
+}
+
+cpg_ex_pat_f <- ID_Pos_Alelo_Patogenica(CpG_exonica_identificada_f, variabilidad.completa, "G/A")
+cpg_in_pat_f <- ID_Pos_Alelo_Patogenica(CpG_intronica_identificada_f, variabilidad.completa, "G/A")
+ccagg_ex_pat_f <- ID_Pos_Alelo_Patogenica(CCAGG_exonica_identificada_f, variabilidad.completa, "G/A")
+ccagg_in_pat_f <- ID_Pos_Alelo_Patogenica(CCAGG_intronica_identificada_f, variabilidad.completa, "G/A")
+cctgg_ex_pat_f <- ID_Pos_Alelo_Patogenica(CCTGG_exonica_identificada_f, variabilidad.completa, "G/A")
+cctgg_in_pat_f <- ID_Pos_Alelo_Patogenica(CCTGG_intronica_identificada_f, variabilidad.completa, "G/A")
+
+```
+
+

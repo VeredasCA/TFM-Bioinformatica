@@ -330,7 +330,7 @@ print("There are {} shared variants (-) in normal allele between patient and pro
 with open(extension, 'w') as f:
 
 #Column names
-    f.write("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n"%("Strand","Position_mutation", "Position_shared_variant_mutated_allele", "Position_shared_variant_normal_allele", "Allele _ref", "Allele_variant", "Reads_with_variant_in_mutated_allele", "Reads_with_variant_in_normal_allele", "Reads_with_pathogenic_patient", "Reads_with_pathogenic_progenitor", "Total_patient_reads", "Total_progenitor_reads", "Percentage")) 
+    f.write("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n"%("Strand","Position_mutation", "Position_shared_variant_mutated_allele", "Position_shared_variant_normal_allele", "Allele _ref", "Allele_variant", "Reads_with_variant_in_mutated_allele", "Reads_with_variant_in_normal_allele", "Reads_with_pathogenic_patient", "Reads_with_pathogenic_progenitor", "Total_patient_reads", "Total_progenitor_reads")) 
 #column data
     for a in dic_mut_f:     
         contador = result_mut_f.count(a)          
